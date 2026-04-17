@@ -22,8 +22,21 @@ const path = require('path');
 const app = express();
 
 // 1. Middleware
+const origins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',') 
+  : ['http://localhost:5173']; // Fallback for local development
+
 app.use(cors({
-  origin: 'http://localhost:5173', // Your Vite Frontend
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl) 
+    // or if the origin is in our allowed list
+    if (!origin || origins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log("Blocked by CORS:", origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
