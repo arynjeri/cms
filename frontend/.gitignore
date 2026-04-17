@@ -41,7 +41,6 @@ index.html
 main.jsx
 .env
 eslint.config.js
-package.json
 README.md
 vite.config.js
 package-lock.json
