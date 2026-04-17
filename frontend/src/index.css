@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/* Base Styles */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-white);
+  color: var(--color-gray-900);
+}
+
+.dark body {
+  background-color: var(--color-gray-950);
+  color: var(--color-white);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--color-gray-100);
+}
+
+.dark ::-webkit-scrollbar-track {
+  background-color: var(--color-gray-900);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-gray-300);
+  border-radius: 9999px;
+}
+
+/* Reusable Components - No @apply needed */
+.btn-primary {
+  display: inline-flex;
+  padding: 0.5rem 1.5rem;
+  background-color: var(--color-indigo-600);
+  color: white;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-indigo-700);
+}
+
+.card {
+  padding: 1.5rem;
+  border: 1px solid var(--color-gray-200);
+  border-radius: 0.75rem;
+  background-color: var(--color-white);
+}
+
+.dark .card {
+  background-color: var(--color-gray-800);
+  border-color: var(--color-gray-700);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
