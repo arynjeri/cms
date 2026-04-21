@@ -90,6 +90,7 @@ exports.createOrder = async (req, res) => {
       totalAmount: calculatedTotal,
       deliveryAddress
     });
+    
 
     await User.findByIdAndUpdate(req.user._id, { cart: [] });
     res.status(201).json(newOrder);
@@ -143,6 +144,14 @@ exports.confirmPayment = async (req, res) => {
     order.status = status === 'success' ? 'paid' : 'pending';
     await order.save();
     res.json({ order });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+exports.clearCart = async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.user._id, { cart: [] });
+    res.json({ message: "Cart cleared" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

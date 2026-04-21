@@ -29,9 +29,13 @@ router.get("/count/seller-orders", authorize(["artisan"]), async (req, res) => {
   }
 });
 
+router.patch('/:id/status', authorize(["artisan"]), orderController.updateOrderStatus);
 router.post("/", authorize(["customer"]), orderController.createOrder);
 router.get("/", authorize(["customer"]), orderController.getMyOrders);
 router.get("/:id", authorize(["customer"]), orderController.getOrderById);
 router.delete("/:id", authorize(["customer"]), orderController.deleteOrder);
-
+router.get("/artisan", authorize(["artisan"]), orderController.getArtisanOrders);
+router.post('/:id/complete', authorize(["customer"]), orderController.completeOrder);
+/*router.post('/:id/confirm', authorize(["customer"]), orderController.releaseFunds);
+router.post('/:id/release', authorize(["admin"]), orderController.releaseFunds);*/
 module.exports = router;

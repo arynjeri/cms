@@ -69,7 +69,6 @@ useEffect(() => {
 
          setStats({
            inventoryCount: invRes.data.length,
-           // Use 'myProducts' instead of 'prodRes.data'
             projectsCount: myProducts.filter(proj => proj.status !== "completed").length,
             publishedCount: myProducts.filter(p => p.status === "approved").length,
             adminUsers: 0,
@@ -97,19 +96,17 @@ useEffect(() => {
           totalRevenue: statsRes.data.totalRevenue || 0
         });
       } else if (user.role === "customer") {
-        const ordersRes = await API.get("/customer/orders/count/my-orders").catch(() => ({ data: { count: 0 } }));
-        
-        setStats({
-          inventoryCount: 0,
-          projectsCount: 0,
-          publishedCount: 0,
-          adminUsers: 0,
-          totalItems: 0,
-          messagesCount: msgRes.data.count,
-          ordersCount: ordersRes.data.count,
-          totalRevenue: 0
-        });
-      }
+    const ordersRes = await API.get("/customer/orders").catch(() => ({ data: [] }));
+    
+    // 🔥 FILTER: Only count completed orders in the dashboard stat card
+    const completedCount = ordersRes.data.filter(o => o.status === "completed" || o.status === "delivered").length;
+
+    setStats({
+      ...stats,
+      messagesCount: msgRes.data.count,
+      ordersCount: completedCount, // Only shows finished business
+    });
+}
       setError("");
     } catch (error) {
       console.error("Failed to fetch stats:", error);
@@ -246,11 +243,11 @@ useEffect(() => {
             <h3 className="text-2xl font-bold">🎨 Artisan Overview</h3>
             <p className={isDark ? "text-gray-400" : "text-gray-600"}>Your inventory and products at a glance</p>
           </div>
-          <div className="stat-card">
+         {/* <div className="stat-card">
                 <h4>Active Orders</h4>
               <p className="text-2xl font-black">{stats.ordersCount || 0}</p>
             </div>
-
+          */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <StatCard
               icon="📦"

@@ -38,3 +38,4 @@ eslint.config.js
 README.md
 package-lock.json
 src/utils
+src/pages/ArtisanWallet.jsx

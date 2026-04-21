@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -31,45 +29,39 @@ function ChatPage() {
     activeChatRef.current = activeChat;
   }, [activeChat]);
 
-  // THE REDIRECT HANDLER
   useEffect(() => {
     const handleAutoStart = async () => {
-      // Check if we came from 'Chat with Artisan'
-      if (location.state?.autoStart && location.state?.product && user?._id) {
-        const p = location.state.product;
-        
-        // Find the Artisan's ID
-        const artisanId = p.seller?._id || p.seller || p.artisan?._id || p.artisan;
+      // Handle the redirect from CustomerMarketplace
+      const product = location.state?.product;
+      const artisanId = location.state?.recipientId || (product?.seller?._id || product?.seller || product?.artisan?._id || product?.artisan);
+      const artisanName = location.state?.recipientName || (product?.seller?.name || "Artisan");
 
-        if (!artisanId) {
-          console.error("No Artisan ID found for redirect");
-          return;
-        }
-
-        // FORCE the chat to be active immediately
+      if (artisanId && user?._id) {
+        // 1. Set the UI Context immediately so the header shows up
         const chatContext = {
-          product: p._id,
-          productName: p.name,
+          product: product?._id || "general", // Fallback to general if no specific product
+          productName: product?.name || "General Inquiry",
           partnerId: artisanId,
-          partnerName: p.seller?.name || "Artisan"
+          partnerName: artisanName
         };
 
         setActiveChat(chatContext);
         
-        // Load history for this specific artisan/product combo
+        // 2. Fetch history for this specific artisan/product combo
         try {
           const config = { headers: { Authorization: `Bearer ${token}` } };
-          const res = await API.get(`/chat/${p._id}/${user._id}`, config);
+          // Note: If your backend uses conversation-based routes, we fetch by participants
+          const res = await API.get(`/chat/${product?._id || 'general'}/${artisanId}`, config);
           setMessages(Array.isArray(res.data) ? res.data : []);
         } catch (err) {
+          console.log("Starting a fresh conversation...");
           setMessages([]);
         }
       }
     };
 
     handleAutoStart();
-  }, [location.state, user?._id, token]); // Runs whenever these values are ready
-
+  }, [location.state, user?._id, token]);
   // SOCKET SETUP (only once per user)
   useEffect(() => {
     if (!user?._id) return;
@@ -79,7 +71,12 @@ function ChatPage() {
       Notification.requestPermission();
     }
     
-    socket.current = io("http://localhost:5000");
+    const SOCKET_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+    socket.current = io(SOCKET_URL, {
+    transports: ["websocket"],
+    withCredentials: true
+});
     socket.current.emit("addUser", user._id);
 
     socket.current.on("getMessage", (data) => {

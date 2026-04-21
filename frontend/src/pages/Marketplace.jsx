@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import API from "../services/api";
+import socket from "../services/socket";
 
 const formatKES = (value) => {
   if (!value || Number.isNaN(value)) return "KSH 0";
@@ -28,6 +29,7 @@ function Marketplace() {
   const [newProduct, setNewProduct] = useState({
     name: "", description: "", price: "", category: "Crochet", imageFile: null, originProject: null 
   });
+  
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -45,6 +47,16 @@ function Marketplace() {
       setArtisanOrders(res.data);
     } catch (err) { console.error("Sales fetch error", err); }
   }, [user]);
+   
+  useEffect(() => {
+    if (user?.role === "artisan") {
+      socket.on("orderNotification", (data) => {
+        console.log("New sale detected, refreshing ledger...");
+        fetchSalesData();
+      });
+    }
+    return () => socket.off("orderNotification");
+  }, [user, fetchSalesData]);
 
   useEffect(() => {
     fetchProducts();
@@ -73,7 +85,6 @@ function Marketplace() {
     setNewProduct({ name: "", description: "", price: "", category: "Crochet", imageFile: null, originProject: null });
   };
 
-  // --- EDIT CLICK HANDLER ---
   const handleEditClick = (product) => {
     setIsEditing(true);
     setCurrentProductId(product._id);
@@ -85,12 +96,24 @@ function Marketplace() {
       originProject: product.parentProject || product.originProject || null,
       imageFile: null 
     });
-    // Set existing image as preview
     setPreviewUrl(product.imageUrl ? `http://localhost:5000${product.imageUrl}` : null);
     setShowAddModal(true);
   };
+  const handleMarkShipped = async (orderId) => {
+  try {
+    const config = { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } };
+    
+    // Change /orders/ to /customer/orders/ to match your server.js
+    await API.patch(`/customer/orders/${orderId}/status`, { status: "shipped" }, config);
+    
+    fetchSalesData();
+    alert("Order marked as shipped! 📦");
+  } catch (err) {
+    console.error("Shipping update failed", err);
+    alert("Update failed. Check if the route exists in customerOrderRoutes.");
+  }
+};
 
-  // --- SUBMIT LOGIC (CREATE OR UPDATE) ---
   const handleCreateOrUpdate = async (e) => {
     e.preventDefault();
     const data = new FormData();
@@ -98,34 +121,21 @@ function Marketplace() {
     data.append("description", newProduct.description);
     data.append("price", newProduct.price);
     data.append("category", newProduct.category);
-    
     if (newProduct.originProject) data.append("originProject", newProduct.originProject);
-    
-    // Only append image if a NEW file was selected
-    if (newProduct.imageFile) {
-      data.append("image", newProduct.imageFile);
-    }
+    if (newProduct.imageFile) data.append("image", newProduct.imageFile);
 
     try {
       if (isEditing) {
-        // Use PUT or PATCH based on your backend route
-        await API.put(`/products/${currentProductId}`, data, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
+        await API.put(`/products/${currentProductId}`, data, { headers: { "Content-Type": "multipart/form-data" } });
         alert("Listing updated successfully! ✨");
       } else {
-        await API.post("/products", data, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
+        await API.post("/products", data, { headers: { "Content-Type": "multipart/form-data" } });
         alert("Work published to marketplace! 🧶");
       }
       resetForm();
       fetchProducts();
       window.history.replaceState({}, document.title, "/marketplace");
-    } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.message || "Operation failed. Check server console.");
-    }
+    } catch (err) { alert(err.response?.data?.message || "Operation failed."); }
   };
 
   const deleteProduct = async (id) => {
@@ -190,29 +200,61 @@ function Marketplace() {
           )}
         </header>
 
-        {/* VIEW: ARTISAN SALES */}
-        {viewMode === "sales" && (
-          <div className="space-y-6">
-            {artisanOrders.map(order => (
-              <div key={order._id} className={`p-8 rounded-[2.5rem] border-2 transition-all ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"}`}>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Order ID: #{order._id.slice(-8)}</span>
-                    <h3 className="text-2xl font-bold mt-1 dark:text-white">Customer: {order.customer?.name}</h3>
-                    <p className="text-sm text-slate-400">{order.customer?.email}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase ${order.status === 'paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
-                      {order.status}
-                    </span>
-                    <p className="text-xl font-black mt-3">{formatKES(order.totalAmount)}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {artisanOrders.length === 0 && <div className="p-20 text-center text-slate-400 italic font-serif">Waiting for your first sale...</div>}
+
+{/* VIEW: ARTISAN SALES */}
+{viewMode === "sales" && (
+  <div className="space-y-6">
+    {artisanOrders.map(order => (
+      <div key={order._id} className={`p-8 rounded-[2.5rem] border-2 transition-all ${
+        order.status === 'delivered' ? "border-emerald-500 bg-emerald-50/10" : isDark ? "border-slate-800 bg-slate-800" : "border-slate-100 bg-white shadow-sm"
+      }`}>
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">
+               {order.transactionCode || `REF: ${order._id.slice(-8)}`}
+            </span>
+            <h3 className="text-2xl font-bold mt-1">Customer: {order.customer?.name}</h3>
+            
+            <div className="mt-4 flex flex-wrap gap-2">
+              {/* STATUS BADGE */}
+              <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${
+                order.status === 'delivered' ? "bg-emerald-600 text-white" : "bg-amber-500 text-white"
+              }`}>
+                {order.status === 'delivered' ? "✅ Funds Released" : `⏳ Status: ${order.status}`}
+              </span>
+
+              {/* ACTION BUTTON: SHIP */}
+              {order.status === 'paid' && (
+                <button
+                  onClick={() => handleMarkShipped(order._id)}
+                  className="px-4 py-1 rounded-lg text-[9px] font-black uppercase bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-lg active:scale-95"
+                >
+                  🚚 Mark as Shipped
+                </button>
+              )}
+
+              {/* ACTION BUTTON: WAITING */}
+              {order.status === 'shipped' && (
+                <span className="px-3 py-1 rounded-lg text-[9px] font-black uppercase bg-slate-200 text-slate-600 italic">
+                  Waiting for Customer Confirmation...
+                </span>
+              )}
+            </div>
           </div>
-        )}
+
+          <div className="text-right">
+            <p className="text-[10px] font-black text-slate-400 uppercase">Your 90% Share</p>
+            <p className="text-2xl font-black text-emerald-500">{formatKES(order.totalAmount * 0.9)}</p>
+            <p className="text-[9px] text-slate-400 mt-1 italic">(Net Profit)</p>
+          </div>
+        </div>
+      </div>
+    ))}
+    {artisanOrders.length === 0 && (
+      <div className="p-20 text-center text-slate-400 italic font-serif">Waiting for your first sale...</div>
+    )}
+  </div>
+)}
 
         {/* VIEW: GALLERY */}
         {viewMode === "gallery" && (
@@ -233,12 +275,9 @@ function Marketplace() {
                 </div>
                 <h3 className="font-serif text-2xl font-bold mb-1 dark:text-white">{product.name}</h3>
                 <p className="text-indigo-600 dark:text-indigo-400 font-black text-xl mb-4">{formatKES(product.price)}</p>
-                
                 <div className="flex gap-2">
                   {user?.role === "customer" && (
-                    <button onClick={() => addToCart(product._id)} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 transition-all">
-                      Add to Cart
-                    </button>
+                    <button onClick={() => addToCart(product._id)} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 transition-all">Add to Cart</button>
                   )}
                   {user?.role === "artisan" && (
                     <>
@@ -257,54 +296,31 @@ function Marketplace() {
             ))}
           </div>
         )}
-
-        {/* LISTING MODAL */}
         {showAddModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
             <div className={`w-full max-w-2xl p-10 rounded-[3rem] shadow-2xl ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white"}`}>
               <div className="flex justify-between items-start mb-6">
-                <h2 className="font-serif text-3xl font-bold dark:text-white underline decoration-indigo-200">
-                  {isEditing ? "Edit Work" : "New Listing"}
-                </h2>
+                <h2 className="font-serif text-3xl font-bold dark:text-white underline decoration-indigo-200">{isEditing ? "Edit Work" : "New Listing"}</h2>
                 <button onClick={resetForm} className="text-2xl">✕</button>
               </div>
               <form onSubmit={handleCreateOrUpdate} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Product Name</label>
-                  <input placeholder="Name" className={inputClass} value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Category</label>
-                  <select className={inputClass} value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
-                    <option>Crochet</option><option>Knitting</option><option>Beading</option><option>Jewelry</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Price (KSH)</label>
-                  <input type="number" placeholder="Price" className={inputClass} value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Change Image</label>
-                  <div className="flex items-center gap-3">
-                    <input type="file" className="text-[10px]" onChange={(e) => {
+                <input placeholder="Name" className={inputClass} value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+                <select className={inputClass} value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
+                  <option>Crochet</option><option>Knitting</option><option>Beading</option><option>Jewelry</option>
+                </select>
+                <input type="number" placeholder="Price" className={inputClass} value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
+                <input type="file" className="text-[10px]" onChange={(e) => {
                       const file = e.target.files[0];
                       if (file) { setNewProduct({ ...newProduct, imageFile: file }); setPreviewUrl(URL.createObjectURL(file)); }
                     }} />
-                    {previewUrl && <img src={previewUrl} className="h-10 w-10 object-cover rounded-lg border border-indigo-500" />}
-                  </div>
-                </div>
                 <textarea placeholder="Description..." className={`md:col-span-2 ${inputClass}`} rows="3" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} />
-                <div className="md:col-span-2 flex gap-4 mt-4">
-                  <button type="submit" className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:opacity-90">
-                    {isEditing ? "SAVE UPDATES" : "PUBLISH WORK"}
-                  </button>
-                  <button type="button" onClick={resetForm} className="px-8 font-black text-[10px] uppercase text-slate-400">Cancel</button>
-                </div>
+                <button type="submit" className="md:col-span-2 bg-indigo-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest">
+                  {isEditing ? "SAVE UPDATES" : "PUBLISH WORK"}
+                </button>
               </form>
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

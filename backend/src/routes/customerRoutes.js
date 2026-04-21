@@ -16,5 +16,5 @@ router.post('/orders', authorize(['customer']), customerController.createOrder);
 router.post('/payments', authorize(['customer']), customerController.createPayment);
 router.post('/payments/confirm', authorize(['customer']), customerController.confirmPayment);
 router.get('/orders', authorize(['customer']), customerController.getOrders);
-
+router.delete('/cart', authorize(['customer']), customerController.clearCart);
 module.exports = router;

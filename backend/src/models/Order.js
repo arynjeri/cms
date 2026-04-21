@@ -11,7 +11,25 @@ const orderSchema = new mongoose.Schema({
     ref: "User"
   },
 
-
+  // --- NEW FINANCIAL FIELDS ---
+  transactionCode: { 
+    type: String, 
+    unique: true,
+    sparse: true  // ✅ Allows multiple null values - only enforces uniqueness for non-null
+  },
+  adminCommission: { 
+    type: Number, 
+    default: 0 
+  },
+  artisanEarnings: { 
+    type: Number, 
+    default: 0 
+  },
+  escrowStatus: { 
+    type: String, 
+    enum: ['held', 'released', 'refunded'], 
+    default: 'held' 
+  },
   items: [
     {
       productId: {
@@ -41,7 +59,7 @@ const orderSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ["pending","pending_admin_verification","shipped","completed", "paid", "failed", "delivered"],
+    enum: ["pending","shipped","completed", "paid", "payment_failed", "delivered","disputed"],
     default: "pending"
   },
 
@@ -49,10 +67,18 @@ const orderSchema = new mongoose.Schema({
     type: String,
     default: ""
   },
+  paymentErrorMessage: {
+    type: String,
+    default: ""
+  },
+  paidAt: {
+    type: Date,
+    default: null
+  },
   checkoutRequestID: {
-  type: String,
-  default: ""
-},
+    type: String,
+    default: ""
+  },
 
   deliveryAddress: {
     street: String,
@@ -63,7 +89,12 @@ const orderSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now
-  }
+  },
+  feedback: {
+    rating: { type: Number, min: 1, max: 5 },
+    comment: { type: String },
+    createdAt: { type: Date, default: Date.now }
+  },
 });
 
 module.exports = mongoose.model("Order", orderSchema);

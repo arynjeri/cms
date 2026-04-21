@@ -6,14 +6,17 @@ exports.register = async (req, res) => {
   try {
     const { name, email, phoneNumber, password, role } = req.body;
 
-    // Prevent admin registration through public API
     if (role === 'admin') {
-      return res.status(403).json({ message: 'Admin accounts can only be created by system administrators' });
+      return res.status(403).json({ message: 'Admin accounts cannot be created publicly' });
     }
 
-    // Only allow artisan and customer registration
     if (!['artisan', 'customer'].includes(role)) {
-      return res.status(400).json({ message: 'Invalid role. Only artisan or customer allowed' });
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+
+    // 📧 GMAIL ONLY VALIDATION
+    if (!email.toLowerCase().endsWith("@gmail.com")) {
+      return res.status(400).json({ message: 'Only @gmail.com accounts are allowed' });
     }
 
     const existingUser = await User.findOne({ email });
@@ -21,33 +24,35 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'Email already exists' });
     }
 
-    // Validation for password strength
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     if (!passwordRegex.test(password)) {
-      return res.status(400).json({
-        message: 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character'
-      });
+      return res.status(400).json({ message: 'Password is too weak' });
     }
 
-    // Validation for phone number
-    const phoneRegex = /^(07|01)\d{8}$/;
-    if (!phoneRegex.test(phoneNumber)) {
-      return res.status(400).json({
-        message: 'Invalid phone number format'
-      });
+    // 📱 PHONE SANITIZATION (Convert 07... or 01... to 254...)
+    let cleanPhone = phoneNumber.replace(/\D/g, ""); 
+    if (cleanPhone.startsWith("0")) {
+      cleanPhone = "254" + cleanPhone.substring(1);
+    } else if (cleanPhone.startsWith("7") || cleanPhone.startsWith("1")) {
+      cleanPhone = "254" + cleanPhone;
     }
 
+    // Validate finalized 254 format
+    const phoneRegex = /^254(7|1)\d{8}$/;
+    if (!phoneRegex.test(cleanPhone)) {
+      return res.status(400).json({ message: 'Invalid Kenyan phone number' });
+    }
 
     const user = await User.create({
       name,
-      email,
-      phoneNumber,
+      email: email.toLowerCase(),
+      phoneNumber: cleanPhone, // Store as 254...
       passwordHash: password, 
       role
     });
 
     const token = jwt.sign(
-      { id: user._id, name: user.name, email: user.email, role: user.role },
+      { id: user._id, name: user.name, email: user.email, role: user.role, phoneNumber: user.phoneNumber },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRE }
     );
@@ -62,7 +67,7 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
@@ -80,7 +85,8 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
         profilePic: user.profilePic,
-        phoneNumber: user.phoneNumber
+        phoneNumber: user.phoneNumber,
+        balance: user.balance // Include initial balance in token
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRE }

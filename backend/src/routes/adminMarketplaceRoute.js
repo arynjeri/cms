@@ -10,8 +10,35 @@ router.get('/stats', authorize(['admin']), adminMarketplaceController.getDashboa
 router.get('/products', authorize(['admin']), adminMarketplaceController.getAllProducts);
 router.put('/products/:productId/status', authorize(['admin']), adminMarketplaceController.updateProductStatus);
 router.get('/artisans', authorize(['admin']), adminMarketplaceController.getAllArtisans);
+router.post('/orders/:id/payout', authorize(['admin']), adminMarketplaceController.handleReleasePayout);
+
+// --- Artisan Wallet Endpoint ---
+router.get('/wallet', authorize(['artisan']), adminMarketplaceController.getArtisanWallet);
 
 // --- Superuser Order Controls ---
+router.patch('/orders/:id/status', authorize(['admin']), async (req, res) => {
+  // Dispatch to proper handler based on status
+  const { status } = req.body;
+  if (status === 'paid') {
+    return adminMarketplaceController.markOrderAsPaid(req, res);
+  } else if (status === 'delivered') {
+    return adminMarketplaceController.markOrderAsDelivered(req, res);
+  } else {
+    // Default: just update status
+    try {
+      const Order = require('../models/Order');
+      const order = await Order.findByIdAndUpdate(
+        req.params.id,
+        { status },
+        { new: true }
+      );
+      return res.json({ message: `Order status updated to ${status}`, order });
+    } catch (err) {
+      return res.status(500).json({ message: err.message });
+    }
+  }
+});
+
 router.patch('/orders/:id/pay', authorize(['admin']), async (req, res) => {
   try {
     const Order = require('../models/Order');
@@ -80,5 +107,43 @@ router.post("/payouts/:id/clear", authorize(['admin']), async (req, res) => {
     res.status(500).json({ message: "Error clearing balance" });
   }
 });
+// Add to backend/routes/adminMarketplaceRoute.js
+router.post('/maintenance/sync-balances', authorize(['admin']), async (req, res) => {
+  try {
+    const Order = require('../models/Order');
+    const User = require('../models/User');
 
+    // 1. Find all orders that are Paid, Shipped, or Completed
+    const orders = await Order.find({ 
+      status: { $in: ['paid', 'shipped', 'completed'] },
+      escrowStatus: { $ne: 'released' } // Only pick those where funds haven't been released yet
+    });
+
+    let recoveredTotal = 0;
+
+    for (const order of orders) {
+      const artisanId = order.items[0].seller;
+      const payoutAmount = order.totalAmount * 0.90;
+
+      if (artisanId) {
+        // Update Artisan Balance
+        await User.findByIdAndUpdate(artisanId, { $inc: { balance: payoutAmount } });
+        
+        // Mark as released so we don't double-pay if we run this again
+        order.escrowStatus = 'released';
+        await order.save();
+        
+        recoveredTotal += payoutAmount;
+      }
+    }
+
+    res.json({ 
+      message: "Sync complete", 
+      ordersProcessed: orders.length, 
+      totalFundsRecovered: recoveredTotal 
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 module.exports = router;

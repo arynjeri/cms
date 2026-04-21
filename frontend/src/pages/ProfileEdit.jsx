@@ -50,7 +50,12 @@ function ProfileEdit() {
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-full overflow-hidden bg-slate-100 border-2 border-indigo-500">
             {user?.profilePic ? (
-              <img src={`http://localhost:5000${user.profilePic}`} className="w-full h-full object-cover" alt="Profile" />
+              <img 
+                  src={`http://localhost:5000${user.profilePic}`} 
+                       className="w-full h-full object-cover" 
+                        alt="Profile" 
+                        crossOrigin="anonymous" 
+                  />
             ) : (
               <div className="w-full h-full flex items-center justify-center font-black text-slate-400 bg-slate-200">{user?.name?.charAt(0)}</div>
             )}

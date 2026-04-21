@@ -3,15 +3,15 @@ const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  phoneNumber: { type: String, required: false },
+  email: { type: String, required: true, unique: true }, // Real unique Gmails
+  phoneNumber: { type: String, required: false }, // Real phone numbers
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ["admin", "artisan", "customer"], required: true },
-  profilePic: { type: String, default: "" }, // Path to the image
-  // Financial tracking
+  profilePic: { type: String, default: "" },
   balance: { type: Number, default: 0 }, 
-  mpesaNumber: { type: String }, 
-
+  mpesaNumber: { type: String },
+  totalSales: { type: Number, default: 0 }, 
+  salesCount: { type: Number, default: 0 }, 
   wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
   cart: [{
     product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
@@ -22,15 +22,10 @@ const userSchema = new mongoose.Schema({
 });
 
 userSchema.pre("save", async function () {
-  // If the password hasn't been changed, skip hashing
   if (!this.isModified("passwordHash")) return;
-
-  // Safety check: If for some reason the password is empty, don't hash it
   if (!this.passwordHash) return;
-
-  // Hash the password
   const salt = await bcrypt.genSalt(10);
   this.passwordHash = await bcrypt.hash(this.passwordHash, salt);
-  
 });
+
 module.exports = mongoose.model("User", userSchema);

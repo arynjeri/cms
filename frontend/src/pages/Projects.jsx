@@ -49,18 +49,35 @@ function Projects() {
     : "bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-400 shadow-sm"
   }`;
 
-  const addMaterial = (inventoryId) => {
-    const item = inventory.find(i => i._id === inventoryId);
-    if (!item || selectedMaterials.find(m => m.inventoryItem === inventoryId)) return;
-    
-    setSelectedMaterials([...selectedMaterials, {
+  const addMaterial = (e) => {
+    const inventoryId = e.target.value;
+  const item = inventory.find(i => i._id === inventoryId);
+  if (!item) return;
+
+  setSelectedMaterials(prev => {
+    const existing = prev.find(m => m.inventoryItem === inventoryId);
+    if (existing) {
+      // If already linked, update the quantity with the new tempQty
+      return prev.map(m => 
+        m.inventoryItem === inventoryId 
+        ? { ...m, quantityUsed: Number(tempQty) } 
+        : m
+      );
+    }
+    // If new, add it to the list
+    return [...prev, {
       inventoryItem: inventoryId,
       name: item.name,
       unit: item.unit,
       quantityUsed: Number(tempQty)
-    }]);
-    setTempQty(1);
-  };
+    }];
+  });
+  setTempQty(1); // Reset qty for the next item
+  e.target.value = ""; // Reset the select dropdown
+};
+  const removeMaterial = (inventoryId) => {
+  setSelectedMaterials(selectedMaterials.filter(m => m.inventoryItem !== inventoryId));
+};
 
   const handleCreateOrUpdate = async (e) => {
     e.preventDefault();
@@ -84,6 +101,13 @@ function Projects() {
       alert("Failed to save project. Check if you have enough materials in your stash!"); 
     }
   };
+
+  const handleCancel = () => {
+  setShowForm(false);
+  setEditingId(null);
+  setFormData({ name: "", description: "", craftType: "Knitting", status: "ongoing" });
+  setSelectedMaterials([]); // Clear the linked materials
+};
 
   const startEdit = (project) => {
     setFormData({ 
@@ -161,24 +185,40 @@ function Projects() {
                     <h3 className="font-black text-slate-400 uppercase text-[10px] tracking-widest">Link Stash Materials</h3>
                     <div className="flex gap-2">
                       <input type="number" value={tempQty} onChange={e => setTempQty(e.target.value)} className={`${inputClass} w-24`} min="1" />
-                      <select onChange={e => addMaterial(e.target.value)} className={inputClass} defaultValue="">
-                        <option value="" disabled>Pick from Stash...</option>
+                      <select onChange={(e) => addMaterial(e)} className={inputClass} value="">
+                        <option value="" disabled>Pick/Update from Stash...</option>
                         {inventory.map(i => <option key={i._id} value={i._id} disabled={i.quantity < 1}>{i.name} ({i.quantity} {i.unit})</option>)}
                       </select>
                     </div>
                     <div className="flex flex-wrap gap-2 p-4 border-2 border-dashed rounded-xl min-h-[100px] items-start bg-slate-50/50 dark:bg-slate-900/30">
                       {selectedMaterials.length === 0 && <p className="text-[10px] text-slate-400 italic uppercase font-black">No materials linked...</p>}
                       {selectedMaterials.map((m, i) => (
-                        <span key={i} className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter shadow-sm">
+                        <button 
+                          key={i} 
+                          type="button"
+                          onClick={() => removeMaterial(m.inventoryItem)}
+                          className="bg-indigo-600 hover:bg-red-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter shadow-sm transition-all group flex items-center gap-2"
+                        >
                           {m.name} x{m.quantityUsed}
-                        </span>
+                          <span className="opacity-50 group-hover:opacity-100 font-bold">✕</span>
+                        </button>
                       ))}
                     </div>
                   </>
                 )}
-                <button type="submit" className="w-full bg-slate-950 text-white dark:bg-indigo-600 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:opacity-90 transition-all">
-                  {editingId ? "SAVE UPDATES" : "LAUNCH PROJECT"}
-                </button>
+                
+                <div className="flex gap-3">
+                  <button type="submit" className="flex-[2] bg-slate-950 text-white dark:bg-indigo-600 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:opacity-90 transition-all">
+                    {editingId ? "SAVE UPDATES" : "LAUNCH PROJECT"}
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={handleCancel}
+                    className="flex-1 bg-transparent border-2 border-slate-200 dark:border-slate-700 text-slate-400 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-red-50 hover:text-red-500 hover:border-red-100 transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -271,5 +311,4 @@ function Projects() {
     </div>
   );
 }
-
 export default Projects;

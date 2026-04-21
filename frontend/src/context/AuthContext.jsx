@@ -1,80 +1,52 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { jwtDecode } from "jwt-decode";
+import axios from "axios";
 
-// Helper function to check if token is expired
-const isTokenExpired = (token) => {
-  try {
-    const decoded = jwtDecode(token);
-    const currentTime = Date.now() / 1000;
-    return decoded.exp < currentTime;
-  } catch {
-    return true;
-  }
-};
+// 1. Create the context internally
+const AuthContext = createContext(null);
 
-// Helper function to validate token payload
-const isValidToken = (token) => {
-  try {
-    const decoded = jwtDecode(token);
-    // Ensure token has required fields
-    return decoded.id || decoded._id;
-  } catch {
-    return false;
-  }
-};
-
-// 1. Keep this internal (not exported) to satisfy the "only-export-components" rule
-export const AuthContext = createContext(null);
-
+// 2. Export the Provider (Vite likes this as a named export)
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     const token = localStorage.getItem("token");
-    if (token && !isTokenExpired(token) && isValidToken(token)) {
+    if (token) {
       try {
-        return jwtDecode(token);
+        const decoded = jwtDecode(token);
+        // Basic check: is token expired?
+        if (decoded.exp < Date.now() / 1000) {
+          localStorage.removeItem("token");
+          return null;
+        }
+        return decoded;
       } catch {
         localStorage.removeItem("token");
         return null;
       }
-    } else {
-      localStorage.removeItem("token");
-      return null;
     }
+    return null;
   });
 
-  const [loading] = useState(false);
-
-  // Token validation effect - check periodically
-  useEffect(() => {
-    const checkTokenValidity = setInterval(() => {
-      const token = localStorage.getItem("token");
-      if (!token || isTokenExpired(token) || !isValidToken(token)) {
-        console.warn("Token expired or invalid, logging out");
-        localStorage.removeItem("token");
-        setUser(null);
-      }
-    }, 60000); // Check every minute
-
-    return () => clearInterval(checkTokenValidity);
+  // Function to sync with real DB data (Real Gmail/Balance)
+  const refreshUser = useCallback(async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      // Direct axios call to avoid circular dependency with your api.js
+      const res = await axios.get(`${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/auth/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUser(prev => ({ ...prev, ...res.data }));
+    } catch (err) {
+      console.error("User refresh failed - check your profile route");
+    }
   }, []);
 
   const login = (token) => {
-    if (!token) return;
-    
-    if (isTokenExpired(token)) {
-      console.error("Cannot login with expired token");
-      return;
-    }
-    
     localStorage.setItem("token", token);
-    try {
-      const decoded = jwtDecode(token);
-      setUser(decoded);
-    } catch (err) {
-      console.error("Login decode failed", err);
-      localStorage.removeItem("token");
-    }
+    const decoded = jwtDecode(token);
+    setUser(decoded);
+    refreshUser(); 
   };
 
   const logout = () => {
@@ -83,14 +55,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// 2. Export the hook from here. 
-// If Vite still complains, move this function to a file named useAuth.js
+// 3. Export the hook (Vite is fine with this alongside the Provider)
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

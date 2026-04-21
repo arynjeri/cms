@@ -102,18 +102,21 @@ exports.publishToMarketplace = async (req, res) => {
   }
 };
 
-// Delete Project (Cleanup)
+// Delete Project
 exports.deleteProject = async (req, res) => {
   try {
-    const project = await Project.findOneAndDelete({ 
-      _id: req.params.id, 
-      artisan: req.user._id 
-    });
+    const project = await Project.findById(req.params.id);
     
-    if (!project) return res.status(404).json({ message: "Project not found" });
-    
-    res.json({ message: "Project deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ message: "Delete failed" });
+    // Return all materials to inventory before deleting the project
+    for (const item of project.materials) {
+      await Inventory.findByIdAndUpdate(item.inventoryItem, {
+        $inc: { quantity: item.quantityUsed }
+      });
+    }
+
+    await project.deleteOne();
+    res.json({ message: "Project deleted and materials returned to stash!" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };

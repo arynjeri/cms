@@ -1,253 +1,224 @@
 /* eslint-disable no-unused-vars */
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import API from "../services/api";
+import * as XLSX from "xlsx";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
-const formatKES = (value) => {
-  if (!value || Number.isNaN(value)) return "KSH 0";
-  return `KSH ${Number(value).toLocaleString("en-KE")}`;
-};
+const formatKES = (v) => `KSH ${Number(v || 0).toLocaleString("en-KE")}`;
 
 function AdminMarketplace() {
-  const { user } = useAuth();
+  const { token } = useAuth();
   const { isDark } = useTheme();
-  
-  // --- STATES ---
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("products"); // products, orders, stats
+  const [activeTab, setActiveTab] = useState("orders");
   const [filter, setFilter] = useState("all");
 
-  // --- DATA FETCHING ---
-  const fetchAllAdminData = useCallback(async () => {
-    if (user?.role !== "admin") {
-      setError("You don't have permission to access this page");
-      return;
-    }
+  const fetchAllData = useCallback(async () => {
     try {
-      setLoading(true);
-      const [prodRes, orderRes, statsRes] = await Promise.all([
-        API.get("/admin-marketplace/products"),
-        API.get("/admin-marketplace/orders"),
-        API.get("/admin-marketplace/stats")
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const [pRes, oRes] = await Promise.all([
+        API.get("/admin-marketplace/products", config),
+        API.get("/admin-marketplace/orders", config)
       ]);
-      setProducts(prodRes.data);
-      setOrders(orderRes.data);
-      setStats(statsRes.data);
-      setError("");
-    } catch (err) {
-      console.error("Failed to fetch admin data:", err);
-      setError("Failed to load management console data");
-    } finally {
-      setLoading(false);
+      setProducts(pRes.data);
+      setOrders(oRes.data);
+    } catch (err) { console.error("Sync Error"); }
+  }, [token]);
+
+  useEffect(() => { fetchAllData(); }, [fetchAllData]);
+
+  //  Revenue is only counted for Shipped or Completed orders
+  const financialBase = useMemo(() => {
+    return orders.filter(o => ["shipped", "completed"].includes(o.status));
+  }, [orders]);
+
+  const revenueData = useMemo(() => {
+    const total = financialBase.reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
+    return [
+      { name: "Artisan Share (90%)", value: total * 0.9, color: "#4F46E5" },
+      { name: "System Earnings (10%)", value: total * 0.1, color: "#10B981" }
+    ];
+  }, [financialBase]);
+
+  const filteredItems = useMemo(() => {
+    if (activeTab === "stats") {
+       return filter === "all" ? financialBase : financialBase.filter(o => o.status === filter);
     }
-  }, [user]);
-
-  useEffect(() => {
-    fetchAllAdminData();
-  }, [fetchAllAdminData]);
-
-  // --- PRODUCT ACTIONS ---
-  const updateProductStatus = async (productId, status) => {
-    try {
-      await API.put(`/admin-marketplace/products/${productId}/status`, { status });
-      fetchAllAdminData();
-    } catch (err) {
-      alert("Failed to update product status");
+    if (activeTab === "orders") {
+       const base = orders.filter(o => o.status !== 'paid'); 
+       return filter === "all" ? base : base.filter(o => o.status === filter);
     }
-  };
+    return filter === "all" ? products : products.filter(p => p.status === filter);
+  }, [orders, products, filter, activeTab, financialBase]);
 
-  // --- ORDER ACTIONS (SUPERUSER CONTROLS) ---
-  const handleOrderAction = async (orderId, action) => {
-    const confirmMsg = action === 'delete' 
-      ? "Are you sure? This permanently removes the order from the database." 
-      : `Mark this order as ${action === 'pay' ? 'PAID' : 'DELIVERED'}?`;
-
-    if (!window.confirm(confirmMsg)) return;
-
+  const handleAction = async (id, type, action) => {
+    const config = { headers: { Authorization: `Bearer ${token}` } };
     try {
-      if (action === 'pay') {
-        await API.patch(`/admin-marketplace/orders/${orderId}/pay`);
-      } else if (action === 'deliver') {
-        await API.patch(`/admin-marketplace/orders/${orderId}/deliver`);
-      } else if (action === 'delete') {
-        await API.delete(`/admin-marketplace/orders/${orderId}`);
+      if (type === 'prod') {
+        await API.put(`/admin-marketplace/products/${id}/status`, { status: action }, config);
+        alert(`Product ${action}!`);
+      } else if (action === 'release') {
+        await API.post(`/admin-marketplace/orders/${id}/payout`, {}, config);
+        alert("💰 Funds released to Artisan!");
+      } else if (action === 'paid') {
+        await API.patch(`/admin-marketplace/orders/${id}/status`, { status: 'paid' }, config);
+        alert("✅ Order manually confirmed as PAID");
+      } else {
+        await API.patch(`/admin-marketplace/orders/${id}/status`, { status: action }, config);
+        alert(`Status: ${action}`);
       }
-      fetchAllAdminData(); 
+      fetchAllData();
     } catch (err) {
-      alert(err.response?.data?.message || `Failed to perform ${action}`);
+      alert("Action failed.");
     }
   };
-
-  const filteredProducts = products.filter((p) => {
-    if (filter === "all") return true;
-    return p.status === filter;
-  });
 
   return (
-    <div className={`space-y-8 p-6 ${isDark ? "text-white" : "text-slate-900"}`}>
+    <div className={`min-h-screen p-10 ${isDark ? "bg-slate-900 text-white" : "bg-white text-slate-900"}`}>
       
-      {/* Header & Tabs */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-4xl font-black tracking-tighter uppercase">Admin <span className="text-indigo-600">Console</span></h1>
-          <p className={isDark ? "text-gray-400 text-sm" : "text-gray-600 text-sm"}>
-            Overseeing the artisan marketplace and system transactions
-          </p>
-        </div>
-
-        <div className="flex bg-slate-100 p-1 rounded-2xl dark:bg-slate-800">
-          {["products", "orders", "stats"].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                activeTab === tab 
-                ? "bg-white dark:bg-slate-700 shadow-sm text-indigo-600" 
-                : "text-slate-400"
-              }`}
-            >
-              {tab}
-            </button>
+      <div className="flex justify-between items-center mb-10 border-b pb-8">
+        <h1 className="text-3xl font-black italic uppercase tracking-tighter">System <span className="text-indigo-600">Console</span></h1>
+        <nav className="flex gap-8">
+          {["orders", "products", "stats"].map(t => (
+            <button key={t} onClick={() => {setActiveTab(t); setFilter("all");}} className={`text-[10px] font-black uppercase ${activeTab === t ? "text-indigo-600 underline underline-offset-8" : "text-slate-400"}`}>{t}</button>
           ))}
-        </div>
+        </nav>
       </div>
 
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-bold uppercase">
-          {error}
+      {activeTab === "stats" && (
+        <div className="space-y-12">
+          {/* Revenue Summary Section */}
+          <div className="flex flex-col md:flex-row gap-12 items-center bg-white dark:bg-slate-800 p-10 rounded-[3rem] border shadow-sm">
+            <div className="w-full md:w-1/2 h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={revenueData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={70} outerRadius={100} paddingAngle={8}>
+                    {revenueData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="w-full md:w-1/2 grid grid-cols-1 gap-4">
+               <div className="p-6 border-l-4 border-indigo-600 bg-slate-50 dark:bg-slate-900 rounded-r-2xl">
+                 <p className="text-[9px] font-black uppercase text-slate-400">In-System Revenue</p>
+                 <p className="text-3xl font-black text-indigo-600">{formatKES(revenueData[0].value + revenueData[1].value)}</p>
+               </div>
+               <div className="p-6 border-l-4 border-emerald-500 bg-slate-50 dark:bg-slate-900 rounded-r-2xl">
+                 <p className="text-[9px] font-black uppercase text-slate-400">Net Profit (10%)</p>
+                 <p className="text-3xl font-black text-emerald-500">{formatKES(revenueData[1].value)}</p>
+               </div>
+               <div className="p-6 border-l-4 border-blue-400 bg-slate-50 dark:bg-slate-900 rounded-r-2xl">
+                 <p className="text-[9px] font-black uppercase text-slate-400">Artisan Payouts (90%)</p>
+                 <p className="text-3xl font-black text-blue-400">{formatKES(revenueData[0].value)}</p>
+               </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="flex gap-4 p-2 bg-slate-50 dark:bg-slate-900 w-fit rounded-2xl border">
+              {["all", "shipped", "completed"].map(f => (
+                <button key={f} onClick={() => setFilter(f)} className={`px-5 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${filter === f ? "bg-indigo-600 text-white" : "text-slate-400"}`}>{f}</button>
+              ))}
+            </div>
+            <div className="bg-white dark:bg-slate-800 border rounded-[2.5rem] overflow-hidden shadow-sm">
+              <table className="w-full text-left text-[11px]">
+                <thead className="text-[9px] font-black uppercase opacity-50 bg-slate-50 dark:bg-slate-900">
+                  <tr>
+                    <th className="p-5">M-Pesa Ref</th>
+                    <th className="p-5">Status</th>
+                    <th className="p-5">Total</th>
+                    <th className="p-5 text-emerald-500">Platform (10%)</th>
+                    <th className="p-5">Artisan (90%)</th>
+                    <th className="p-5">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y font-bold">
+                  {filteredItems.map(o => (
+                    <tr key={o._id}>
+                      <td className="p-5 font-mono text-indigo-600">{o.paymentMpesaReceipt || "N/A"}</td>
+                      <td className="p-5 italic opacity-60 uppercase">{o.status}</td>
+                      <td className="p-5">{formatKES(o.totalAmount)}</td>
+                      <td className="p-5 text-emerald-500">+{formatKES(Number(o.totalAmount) * 0.1)}</td>
+                      <td className="p-5">+{formatKES(Number(o.totalAmount) * 0.9)}</td>
+                      <td className="p-5 opacity-40">{new Date(o.createdAt).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* VIEW: STATS SUMMARY */}
-      {activeTab === "stats" && stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className={`p-8 rounded-[2rem] border ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"}`}>
-            <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Total Revenue</p>
-            <p className="text-3xl font-black text-emerald-500">{formatKES(stats.totalRevenue)}</p>
-          </div>
-          <div className={`p-8 rounded-[2rem] border ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"}`}>
-            <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Total Orders</p>
-            <p className="text-3xl font-black">{stats.totalOrders}</p>
-          </div>
-          <div className={`p-8 rounded-[2rem] border ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"}`}>
-            <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Pending Approvals</p>
-            <p className="text-3xl font-black text-amber-500">{stats.pendingProducts}</p>
-          </div>
-          <div className={`p-8 rounded-[2rem] border ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"}`}>
-            <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Active Artisans</p>
-            <p className="text-3xl font-black text-indigo-500">{stats.totalArtisans}</p>
-          </div>
-        </div>
-      )}
-
-      {/* VIEW: PRODUCTS MANAGEMENT */}
-      {activeTab === "products" && (
+      {activeTab !== "stats" && (
         <div className="space-y-6">
-          <div className="flex gap-2">
-            {["all", "pending", "approved", "rejected"].map((s) => (
-              <button
-                key={s}
-                onClick={() => setFilter(s)}
-                className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-tighter transition-all ${
-                  filter === s ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800"
-                }`}
-              >
-                {s}
-              </button>
+          <div className="flex gap-4">
+            {(activeTab === "orders" ? ["all", "pending", "shipped", "completed"] : ["all", "pending", "approved", "rejected"]).map(f => (
+              <button key={f} onClick={() => setFilter(f)} className={`px-5 py-2 rounded-full text-[9px] font-black uppercase border ${filter === f ? "bg-indigo-600 text-white border-indigo-600" : "text-slate-400 border-slate-200"}`}>{f}</button>
             ))}
           </div>
 
-          <div className={`rounded-[2.5rem] border overflow-hidden ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"}`}>
-            <table className="w-full text-left">
-              <thead className={`text-[10px] font-black uppercase tracking-widest ${isDark ? "bg-slate-700 text-slate-400" : "bg-slate-50 text-slate-500"}`}>
+          <div className="border rounded-[2rem] overflow-hidden bg-white dark:bg-slate-800 shadow-xl">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-900 text-[10px] font-black uppercase">
                 <tr>
-                  <th className="px-8 py-5">Item</th>
-                  <th className="px-8 py-5">Artisan</th>
-                  <th className="px-8 py-5">Price</th>
-                  <th className="px-8 py-5">Status</th>
-                  <th className="px-8 py-5 text-right">Action</th>
+                  {activeTab === "orders" ? (
+                    <>
+                      <th className="p-6">M-Pesa Ref</th>
+                      <th className="p-6">Customer</th>
+                      <th className="p-6">Amount</th>
+                      <th className="p-6">Status</th>
+                      <th className="p-6 text-right">Actions</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="p-6">Product</th>
+                      <th className="p-6">Artisan</th>
+                      <th className="p-6">Price</th>
+                      <th className="p-6 text-right">Moderation</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                {filteredProducts.map((p) => (
-                  <tr key={p._id} className={isDark ? "hover:bg-slate-700/50" : "hover:bg-slate-50/50"}>
-                    <td className="px-8 py-6 font-bold">{p.name}</td>
-                    <td className="px-8 py-6 text-sm">{p.artisan?.name}</td>
-                    <td className="px-8 py-6 font-black text-indigo-600">{formatKES(p.price)}</td>
-                    <td className="px-8 py-6">
-                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${
-                        p.status === 'approved' ? 'bg-emerald-100 text-emerald-600' : 
-                        p.status === 'pending' ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'
-                      }`}>
-                        {p.status}
-                      </span>
-                    </td>
-                    <td className="px-8 py-6 text-right space-x-2">
-                      {p.status !== "approved" && (
-                        <button onClick={() => updateProductStatus(p._id, "approved")} className="px-4 py-2 bg-emerald-500 text-white text-[9px] font-black uppercase rounded-lg shadow-sm">Approve</button>
-                      )}
-                      {p.status !== "rejected" && (
-                        <button onClick={() => updateProductStatus(p._id, "rejected")} className="px-4 py-2 bg-red-500 text-white text-[9px] font-black uppercase rounded-lg shadow-sm">Reject</button>
-                      )}
-                    </td>
+                {filteredItems.map(item => (
+                  <tr key={item._id}>
+                    {activeTab === "orders" ? (
+                      <>
+                        <td className="p-6 font-mono font-black text-indigo-600">{item.paymentMpesaReceipt || "---"}</td>
+                        <td className="p-6 opacity-60 uppercase">{item.customer?.name || "N/A"}</td>
+                        <td className="p-6 font-bold">{formatKES(item.totalAmount)}</td>
+                        <td className="p-6 text-[9px] font-black uppercase italic opacity-60">{item.status}</td>
+                        <td className="p-6 text-right space-x-2">
+                          {item.status === 'pending' && (
+                            <button onClick={() => handleAction(item._id, 'order', 'paid')} className="border-2 border-emerald-500 text-emerald-600 px-3 py-1 rounded-lg text-[9px] font-black uppercase shadow-sm">Force Paid</button>
+                          )}
+                          {(item.status === 'shipped' || item.status === 'completed') && item.escrowStatus !== 'released' && (
+                            <button onClick={() => handleAction(item._id, 'order', 'release')} className="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase shadow-md">Release Funds</button>
+                          )}
+                        </td >
+                      </>
+                    ) : (
+                      <>
+                        <td className="p-6 font-black uppercase">{item.name}</td>
+                        <td className="p-6 font-bold uppercase opacity-60">{item.artisan?.name}</td>
+                        <td className="p-6 font-black text-indigo-600">{formatKES(item.price)}</td>
+                        <td className="p-6 text-right space-x-2">
+                          <button onClick={() => handleAction(item._id, 'prod', 'approved')} className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase">Approve</button>
+                          <button onClick={() => handleAction(item._id, 'prod', 'rejected')} className="bg-red-500 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase">Reject</button>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      {/* VIEW: ALL ORDERS */}
-      {activeTab === "orders" && (
-        <div className={`rounded-[2.5rem] border overflow-hidden ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"}`}>
-          <table className="w-full text-left">
-            <thead className={`text-[10px] font-black uppercase tracking-widest ${isDark ? "bg-slate-700 text-slate-400" : "bg-slate-50 text-slate-500"}`}>
-              <tr>
-                <th className="px-8 py-5">Order ID</th>
-                <th className="px-8 py-5">Customer</th>
-                <th className="px-8 py-5">Amount</th>
-                <th className="px-8 py-5">Status</th>
-                <th className="px-8 py-5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {orders.map((o) => (
-                <tr key={o._id} className={isDark ? "hover:bg-slate-700/50" : "hover:bg-slate-50/50"}>
-                  <td className="px-8 py-6 text-xs font-mono">#{o._id.slice(-8)}</td>
-                  <td className="px-8 py-6 text-sm">
-                    <div className="font-bold">{o.customer?.name}</div>
-                    <div className="text-[10px] text-slate-400">{o.customer?.email}</div>
-                  </td>
-                  <td className="px-8 py-6 font-black">{formatKES(o.totalAmount)}</td>
-                  <td className="px-8 py-6">
-                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${
-                      o.status === 'paid' ? 'bg-emerald-100 text-emerald-600' : 
-                      o.status === 'delivered' ? 'bg-indigo-100 text-indigo-600' :
-                      'bg-amber-100 text-amber-600'
-                    }`}>
-                      {o.status}
-                    </span>
-                  </td>
-                  <td className="px-8 py-6 text-right space-x-2">
-                    {o.status === 'pending' && (
-                      <button onClick={() => handleOrderAction(o._id, 'pay')} className="px-3 py-1 border border-emerald-500 text-emerald-500 text-[9px] font-black uppercase rounded-lg hover:bg-emerald-500 hover:text-white transition-all">Force Paid</button>
-                    )}
-                    {o.status === 'paid' && (
-                      <button onClick={() => handleOrderAction(o._id, 'deliver')} className="px-3 py-1 border border-indigo-500 text-indigo-500 text-[9px] font-black uppercase rounded-lg hover:bg-indigo-500 hover:text-white transition-all">Deliver</button>
-                    )}
-                    <button onClick={() => handleOrderAction(o._id, 'delete')} className="px-3 py-1 text-red-400 hover:text-red-600 text-[9px] font-black uppercase transition-all">Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {orders.length === 0 && <div className="p-20 text-center italic text-slate-400">No system orders recorded.</div>}
         </div>
       )}
     </div>
