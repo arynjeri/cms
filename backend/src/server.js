@@ -53,8 +53,9 @@ const server = http.createServer(app);
 // 4. Socket.io setup attached to the HTTP server
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST"]
+    origin: allowedOrigins, // 🔥 Change from "http://localhost:5173"
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
