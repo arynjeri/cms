@@ -20,7 +20,6 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const customerOrderRoutes = require('./routes/customerOrderRoutes'); 
 const orderRoutes = require('./routes/orderRoutes');
 
-const path = require('path');
 const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
