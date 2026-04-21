@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import API from "../services/api";
 import socket from "../services/socket";
+const API_BASE = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : "http://localhost:5000";
 
 const formatKES = (value) => {
   if (!value || Number.isNaN(value)) return "KSH 0";
@@ -96,7 +97,7 @@ function Marketplace() {
       originProject: product.parentProject || product.originProject || null,
       imageFile: null 
     });
-    setPreviewUrl(product.imageUrl ? `http://localhost:5000${product.imageUrl}` : null);
+    setPreviewUrl(product.imageUrl ? `${API_BASE}${product.imageUrl}` : null);
     setShowAddModal(true);
   };
   const handleMarkShipped = async (orderId) => {
@@ -268,7 +269,7 @@ function Marketplace() {
                     </div>
                   )}
                   <img 
-                    src={product.imageUrl ? `http://localhost:5000${product.imageUrl}` : "https://via.placeholder.com/400x500"}
+                    src={product.imageUrl ? `${API_BASE}${product.imageUrl}` : "https://via.placeholder.com/400x500"}
                     alt={product.name}
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                   />

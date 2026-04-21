@@ -23,19 +23,17 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   process.env.FRONTEND_URL
-].filter(Boolean);
+].filter(Boolean); // Cleans out undefined values
 
 app.use(cors({
   origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    const isVercelPreview = origin.endsWith(".vercel.app"); // ✅ Allows all vercel subdomains
-    const isAllowed = allowedOrigins.indexOf(origin) !== -1;
-
-    if (isAllowed || isVercelPreview) {
+    if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      console.log("Blocked by CORS:", origin);
+      console.log("Blocked by CORS:", origin); // Helps you debug in Render logs
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -59,9 +57,17 @@ app.use('/api/products', productRoutes);
 app.use('/api/admin-marketplace', adminMarketplaceRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/projects', projectRoutes);
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+
+const uploadPath = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadPath)) {
+    fs.mkdirSync(uploadPath, { recursive: true });
+    console.log("📁 Created 'uploads' directory for production");
+}
+
+app.use('/uploads', express.static(uploadPath, {
   setHeaders: (res) => {
-    res.set('Cross-Origin-Resource-Policy', 'cross-origin');}
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  }
 })); // Serve uploaded images
 
 // 3. Create HTTP Server for both Express and Socket.io
