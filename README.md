@@ -104,10 +104,10 @@ CMS (Marketplace)
 ## 🚀 Live Deployment
 
 ### Backend
-- **URL:** [_https://cms-mb54.onrender.com_]
+- **URL:** [_https://cms-mb54.onrender.com/api_]
 
 ### Frontend
-- **URL:** [_https://cms-git-main-ary-projects.vercel.app/_]
+- **URL:** [_https://cms-git-main-ary-projects.vercel.app_]
 
 ## 🔧 Installation
 
