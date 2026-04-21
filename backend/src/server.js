@@ -23,25 +23,34 @@ const orderRoutes = require('./routes/orderRoutes');
 const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
-  process.env.FRONTEND_URL
-].filter(Boolean); // Cleans out undefined values
+  process.env.FRONTEND_URL,
+  "https://cms-henna-six.vercel.app",
+  "https://cms-git-main-ary-projects.vercel.app"
+].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // 1. Allow internal server-to-server or tools like Postman (where origin is undefined)
     if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
+
+    const isVercel = origin.endsWith(".vercel.app");
+    const isLocal = origin.startsWith("http://localhost");
+    const isWhitelisted = allowedOrigins.includes(origin);
+
+    if (isWhitelisted || isVercel || isLocal) {
+      return callback(null, true);
     } else {
-      console.log("Blocked by CORS:", origin); // Helps you debug in Render logs
-      callback(new Error('Not allowed by CORS'));
+      console.error("❌ CORS Blocked Origin:", origin);
+      return callback(new Error('Not allowed by CORS'), false);
     }
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
 }));
+
+
+app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
