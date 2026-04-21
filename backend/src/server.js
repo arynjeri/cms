@@ -23,17 +23,19 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   process.env.FRONTEND_URL
-].filter(Boolean); // Cleans out undefined values
+].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    const isVercelPreview = origin.endsWith(".vercel.app"); // ✅ Allows all vercel subdomains
+    const isAllowed = allowedOrigins.indexOf(origin) !== -1;
+
+    if (isAllowed || isVercelPreview) {
       callback(null, true);
     } else {
-      console.log("Blocked by CORS:", origin); // Helps you debug in Render logs
+      console.log("Blocked by CORS:", origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
