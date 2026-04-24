@@ -1,4 +1,4 @@
-# 🎨 Artisan Craft Management System (CMS)
+# 🎨Craft Management System (CMS)
 
 A comprehensive marketplace platform for artisans including crocheters, knitters, beaders, and jewelers to showcase, sell, and manage their craft products with real-time communication and secure M-Pesa payment integration.
 
@@ -27,17 +27,17 @@ A comprehensive marketplace platform for artisans including crocheters, knitters
 - ✅ **Order Management** - Complete order lifecycle from creation to delivery
 - ✅ **M-Pesa Integration** - STK push payment processing with escrow system
 - ✅ **Real-time Notifications** - Browser notifications for orders, messages, and chats
-- ✅ **Admin Dashboard** - System monitoring and order management
+- ✅ **Admin Dashboard** - System monitoring and marketplace management
 - ✅ **Inventory Management** - Artisans can track inventory items
 - ✅ **Profile Management** - User profile with picture upload
-- ✅ **Audit Logging** - Track admin actions and user changes
+- ✅ **Audit Logging** - Track admin actions and changes
 
 ### Advanced Features
 - 🔔 **Order Notifications** - Real-time alerts when orders are paid
 - 💬 **Typing Indicators** - See when the other person is typing
 - 🔐 **Token Expiration** - Auto-logout on token expiry with 1-day expiration
 - 📊 **Dashboard Statistics** - Role-specific stats and metrics
-- 💸 **Escrow System** - Virtual balance for artisans, admin handles payouts
+- 💸 **Escrow System** - Virtual balance for artisans, the system handles payout but can alos be done by admin
 - 📱 **Responsive Design** - Works on desktop, tablet, and mobile
 
 ## 🛠️ Tech Stack
@@ -71,7 +71,7 @@ CMS (Marketplace)
 ├── Frontend (React + Vite)
 │   ├── Authentication Pages
 │   ├── Dashboard (Role-specific)
-│   ├── Product Browse/Management
+│   ├── Product Management
 │   ├── Shopping Cart & Checkout
 │   ├── Real-time Chat
 │   ├── Order Management
@@ -91,7 +91,7 @@ CMS (Marketplace)
 │   ├── Products
 │   ├── Orders
 │   ├── Messages
-│   ├── Inventory
+│   ├── Inventory/Projects
 │   └── Audit Logs
 │
 └── Real-time (Socket.io)
@@ -127,6 +127,8 @@ npm install
 cp .env.example .env
 # Configure environment variables:
 # - MONGODB_URI
+# - JWT_EXPIRE
+# - PORT
 # - JWT_SECRET
 # - DARAJA_CONSUMER_KEY
 # - DARAJA_CONSUMER_SECRET
@@ -176,14 +178,16 @@ CMS/
 │   │   ├── server.js              # Express + Socket.io setup
 │   │   ├── config/
 │   │   │   ├── db.js             # MongoDB connection
-│   │   │   └── daraja.config.js  # M-Pesa configuration
 │   │   ├── controllers/
 │   │   │   ├── authController.js
 │   │   │   ├── productController.js
 │   │   │   ├── customerOrderController.js
 │   │   │   ├── customerPaymentController.js
 │   │   │   ├── adminMarketplaceController.js
-│   │   │   └── ...
+│   │   │   └── projectController.js
+|   |   |   |── productController.js
+│   │   │   └── UserController.js
+│   │   │   ├── customerController.js
 │   │   ├── models/
 │   │   │   ├── User.js
 │   │   │   ├── Product.js
@@ -243,7 +247,7 @@ CMS/
 │   ├── vite.config.js
 │   └── README.md
 │
-└── README.md (This file)
+└── README.md (This file is the main README.md)
 ```
 
 ## 📡 API Documentation

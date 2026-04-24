@@ -55,6 +55,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // 2. Routes
+app.get('/', (req, res) => {
+    res.send('🚀 Craft Management System API is Running Perfectly!');
+});
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/customer/orders', customerOrderRoutes);
