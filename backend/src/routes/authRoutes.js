@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../models/User');
 const authController = require('../controllers/authController');
 const authorize = require('../middleware/auth');
 
@@ -14,6 +15,20 @@ router.get('/me', authorize, async (req, res) => {
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+// Get the latest user profile and balance
+router.get('/profile', authorize(['customer', 'artisan', 'admin']), async (req, res) => {
+  try {
+    // Find the user and send back everything EXCEPT their password
+    const user = await User.findById(req.user._id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json(user);
+  } catch (err) {
+    console.error('Profile fetch error:', err);
+    res.status(500).json({ message: 'Failed to fetch user profile' });
   }
 });
 module.exports = router;

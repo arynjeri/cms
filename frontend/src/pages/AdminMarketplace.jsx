@@ -28,7 +28,12 @@ function AdminMarketplace() {
     } catch (err) { console.error("Sync Error"); }
   }, [token]);
 
-  useEffect(() => { fetchAllData(); }, [fetchAllData]);
+  useEffect(() => { 
+    const loadData = async () => {
+      await fetchAllData();
+    };
+    loadData();
+  }, [fetchAllData]);
 
   //  Revenue is only counted for Shipped or Completed orders
   const financialBase = useMemo(() => {
@@ -76,16 +81,72 @@ function AdminMarketplace() {
     }
   };
 
+  // --- NEW: Generate Report Logic ---
+  const handleGenerateReport = () => {
+    const wb = XLSX.utils.book_new();
+
+    // 1. Financial Stats Sheet
+    const financialSheet = XLSX.utils.json_to_sheet(
+      financialBase.map(o => ({
+        "M-Pesa Ref": o.paymentMpesaReceipt || "N/A",
+        "Status": o.status,
+        "Total (KES)": o.totalAmount,
+        "Platform Cut (10%)": Number(o.totalAmount) * 0.1,
+        "Artisan Cut (90%)": Number(o.totalAmount) * 0.9,
+        "Date": new Date(o.createdAt).toLocaleDateString()
+      }))
+    );
+    XLSX.utils.book_append_sheet(wb, financialSheet, "Financial Stats");
+
+    // 2. All Orders Sheet
+    const ordersSheet = XLSX.utils.json_to_sheet(
+      orders.map(o => ({
+        "M-Pesa Ref": o.paymentMpesaReceipt || "N/A",
+        "Customer": o.customer?.name || "N/A",
+        "Amount (KES)": o.totalAmount,
+        "Status": o.status,
+        "Date": new Date(o.createdAt).toLocaleDateString()
+      }))
+    );
+    XLSX.utils.book_append_sheet(wb, ordersSheet, "All Orders");
+
+    // 3. Products Sheet
+    const productsSheet = XLSX.utils.json_to_sheet(
+      products.map(p => ({
+        "Product": p.name,
+        "Artisan": p.artisan?.name || "N/A",
+        "Price (KES)": p.price,
+        "Status": p.status
+      }))
+    );
+    XLSX.utils.book_append_sheet(wb, productsSheet, "Products");
+
+    // Export the file
+    XLSX.writeFile(wb, "System_Console_Report.xlsx");
+  };
+
   return (
     <div className={`min-h-screen p-10 ${isDark ? "bg-slate-900 text-white" : "bg-white text-slate-900"}`}>
       
       <div className="flex justify-between items-center mb-10 border-b pb-8">
         <h1 className="text-3xl font-black italic uppercase tracking-tighter">System <span className="text-indigo-600">Console</span></h1>
-        <nav className="flex gap-8">
-          {["orders", "products", "stats"].map(t => (
-            <button key={t} onClick={() => {setActiveTab(t); setFilter("all");}} className={`text-[10px] font-black uppercase ${activeTab === t ? "text-indigo-600 underline underline-offset-8" : "text-slate-400"}`}>{t}</button>
-          ))}
-        </nav>
+        
+        {/* Adjusted header container to hold both nav and the new button */}
+        <div className="flex items-center gap-8">
+          <nav className="flex gap-8">
+            {["orders", "products", "stats"].map(t => (
+              <button key={t} onClick={() => {setActiveTab(t); setFilter("all");}} className={`text-[10px] font-black uppercase ${activeTab === t ? "text-indigo-600 underline underline-offset-8" : "text-slate-400"}`}>{t}</button>
+            ))}
+          </nav>
+          
+          
+          <button 
+            onClick={handleGenerateReport} 
+            className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase shadow-md hover:bg-indigo-700 transition-all active:scale-95"
+          >
+            Generate Report
+          </button>
+        </div>
       </div>
 
       {activeTab === "stats" && (

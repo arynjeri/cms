@@ -146,6 +146,27 @@ npm install
 # Frontend uses relative API calls configured in src/services/api.js
 ```
 
+### Admin Account Setup and Recovery
+
+Use the recovery script to set up the first admin account or reset an existing
+admin's password. It connects to the database configured by `MONGODB_URI` in
+`backend/.env`; make sure this is the same database used by the backend you
+intend to sign in to.
+
+1. In `backend/.env`, set `ADMIN_EMAIL` to the admin's email and
+   `ADMIN_PASSWORD` to a new password .
+2. From the `backend` directory, run:
+
+   ```bash
+   node src/scripts/recoverAdmin.js
+   ```
+
+The script resets the password only when `ADMIN_EMAIL` matches an existing
+admin. If an admin exists with a different email, it stops without making
+changes. If no admin exists, it creates the first admin account. Confirm the
+script reports success before signing in with `ADMIN_EMAIL` and
+`ADMIN_PASSWORD`.
+
 ## ▶️ Running the Application
 
 ### Start Backend Server
@@ -207,6 +228,8 @@ CMS/
 │   │   │   └── upload.js
 │   │   ├── services/
 │   │   │   └── inventoryService.js
+│   │   ├── scripts/
+│   │   │   └── recoverAdmin.js
 │   │   └── uploads/
 │   │       └── profiles/
 │   ├── .env                       # Environment variables

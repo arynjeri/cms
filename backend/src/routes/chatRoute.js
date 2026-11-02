@@ -41,12 +41,16 @@ router.get('/count/conversations', authorize(['customer', 'artisan', 'admin']), 
   }
 });
 
-//  Get all unique conversations for the sidebar
-router.get('/conversations', async (req, res) => {
+// Get all unique conversations for the sidebar
+router.get('/conversations', authorize(['customer', 'artisan', 'admin']), async (req, res) => {
   try {
+    // 1. Fix the ID issue (Checks for both ._id and .id just in case)
+    const userId = req.user._id ? req.user._id.toString() : req.user.id.toString();
+    
+    console.log("-----------------------------------------");
+    console.log("🔍 DETECTIVE MODE: Fetching inbox for User ID:", userId);
 
-    const userId = req.headers.userid; // Or req.user.id
-
+    // 2. Find the messages
     const messages = await Message.find({
       $or: [{ sender: userId }, { receiver: userId }]
     })
@@ -55,14 +59,23 @@ router.get('/conversations', async (req, res) => {
     .populate('receiver', 'name')
     .sort({ createdAt: -1 });
 
-    // This logic creates a unique list of "conversations" 
-    // so the sidebar doesn't show 50 messages, just 1 per product combo
+    console.log(`✅ Found ${messages.length} total messages for this user in the database.`);
+
     const conversations = [];
     const seen = new Set();
 
     messages.forEach(msg => {
-      const partnerId = msg.sender._id.toString() === userId ? msg.receiver._id : msg.sender._id;
-      const comboKey = `${msg.product._id}-${partnerId}`;
+      // 3. Check for broken ghost messages
+      if (!msg.sender || !msg.receiver || !msg.product) {
+         console.log("⚠️ WARNING: Found a broken message! It is missing data:");
+         console.log(`   - Has Sender? ${!!msg.sender}`);
+         console.log(`   - Has Receiver? ${!!msg.receiver} <--- (If false, the Artisan ID was missing when the customer sent it)`);
+         console.log(`   - Has Product? ${!!msg.product}`);
+         return; // Skip broken messages so the app doesn't crash
+      }
+
+      const partnerId = msg.sender._id.toString() === userId ? msg.receiver._id.toString() : msg.sender._id.toString();
+      const comboKey = `${msg.product._id.toString()}-${partnerId}`;
 
       if (!seen.has(comboKey)) {
         seen.add(comboKey);
@@ -77,14 +90,17 @@ router.get('/conversations', async (req, res) => {
       }
     });
 
+    console.log(`🚀 Sending ${conversations.length} unique conversations to the screen.`);
+    console.log("-----------------------------------------");
+    
     res.json(conversations);
   } catch (err) {
-    console.error(err);
+    console.error('Conversations error:', err);
     res.status(500).json({ message: "Server Error fetching conversations" });
   }
 });
 // Save a message
-router.post('/', async (req, res) => {
+router.post('/', authorize(['customer', 'artisan', 'admin']), async (req, res) => {
   try {
     const newMessage = new Message(req.body);
     await newMessage.save();
@@ -101,7 +117,7 @@ router.post('/', async (req, res) => {
 });
 
 // Get history for a product/customer combo
-router.get('/:productId/:userId', async (req, res) => {
+router.get('/:productId/:userId', authorize(['customer', 'artisan', 'admin']), async (req, res) => {
   try {
     const messages = await Message.find({
       product: req.params.productId, // Match the 'product' field in your Schema

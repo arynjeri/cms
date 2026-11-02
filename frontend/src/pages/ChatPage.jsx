@@ -160,7 +160,7 @@ function ChatPage() {
   const fetchConversations = useCallback(async () => {
     if (!user?._id) return;
     try {
-      const config = { headers: { Authorization: `Bearer ${token}`, userid: user._id } };
+      const config = { headers: { Authorization: `Bearer ${token}` } };
       const res = await API.get("/chat/conversations", config);
       setConversations(res.data || []);
     } catch (err) {
