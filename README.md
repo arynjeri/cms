@@ -498,5 +498,3 @@ Before deploying to production:
 For issues or questions, please contact the development team or create an issue in the repository.
 
 ---
-
-**Last Updated:** April 16, 2026 
